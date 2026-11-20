@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Singcheck — practise singing and speaking, get feedback</title>
+<meta name="description" content="Sing a note and watch your pitch live, or read a line aloud and get feedback on what you said from a Pollinations transcription model.">
+<style>
+  :root {
+    --bg: #0f0d14;
+    --panel: #17131f;
+    --panel-2: #1f1929;
+    --line: #2e2639;
+    --ink: #f0ecf7;
+    --muted: #a397b4;
+    --accent: #b07cff;
+    --accent-2: #ffb347;
+    --ok: #4ee6a5;
+    --bad: #ff7b8a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  [hidden] { display: none !important; }
+  body {
+    background:
+      radial-gradient(900px 500px at 15% -10%, #2a1c3d 0%, transparent 62%),
+      var(--bg);
+    color: var(--ink);
+    font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  a { color: var(--accent-2); }
+  header {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 14px 18px; border-bottom: 1px solid var(--line);
+    background: rgba(15,13,20,.7); backdrop-filter: blur(10px);
+  }
+  .brand { font-weight: 700; letter-spacing: -.02em; font-size: 17px; }
+  .brand span {
+    background: linear-gradient(95deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 10px; border-radius: 999px; font-size: 12px;
+    border: 1px solid var(--line); color: var(--muted); background: var(--panel);
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .pill b { color: var(--ink); font-weight: 600; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(78,230,165,.14); }
+  button {
+    font: inherit; cursor: pointer; border-radius: 11px;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--ink);
+    padding: 10px 15px; transition: border-color .15s, transform .05s, opacity .15s;
+  }
+  button:hover:not(:disabled) { border-color: #403351; }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary {
+    border: 0; color: #140d1d; font-weight: 660;
+    background: linear-gradient(95deg, var(--accent) 0%, #e0a8ff 100%);
+  }
+  button.ghost { background: transparent; }
+  button.rec.on { border-color: var(--bad); color: #ffd7dc; background: rgba(255,123,138,.12); }
+  main { max-width: 1000px; margin: 0 auto; padding: 18px 18px 42px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tabs button { border-radius: 999px; font-size: 14px; }
+  .tabs button[aria-selected="true"] {
+    border-color: transparent; color: #140d1d; font-weight: 650;
+    background: linear-gradient(95deg, var(--accent), #e0a8ff);
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 16px; padding: 16px; margin-bottom: 14px;
+  }
+  .card h2 {
+    margin: 0 0 6px; font-size: 11.5px; text-transform: uppercase;
+    letter-spacing: .1em; color: var(--muted); font-weight: 700;
+  }
+  .hint { color: var(--muted); font-size: 13.5px; margin: 0 0 12px; }
+  .row { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; }
+  label.field { display: block; margin-top: 12px; font-size: 12.5px; color: var(--muted); }
+  select, input[type="text"] {
+    font: inherit; color: var(--ink); background: #120e18;
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; width: 100%;
+  }
+  select { margin-top: 5px; }
+  select:focus, input:focus, button:focus-visible { outline: 2px solid rgba(176,124,255,.45); outline-offset: 1px; }
+  #status { min-height: 20px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+  #status.err { color: var(--bad); }
+
+  /* meter */
+  #meter-wrap { position: relative; margin: 6px 0 4px; }
+  canvas { width: 100%; display: block; border-radius: 12px; background: #0b0810; border: 1px solid var(--line); }
+  #meter-label {
+    position: absolute; left: 12px; top: 10px; font: 600 13px/1 ui-monospace, Menlo, monospace;
+    color: var(--muted);
+  }
+  .big { font: 700 34px/1.1 ui-monospace, Menlo, monospace; letter-spacing: -.02em; }
+  #note-name { color: var(--accent-2); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 12px; }
+  .stat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .stat .k { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .stat .v { font: 650 20px/1.3 ui-monospace, Menlo, monospace; }
+
+  textarea {
+    width: 100%; min-height: 74px; resize: vertical; padding: 11px;
+    border-radius: 11px; border: 1px solid var(--line); background: #120e18;
+    color: var(--ink); font: inherit;
+  }
+  .phrases { display: flex; gap: 7px; flex-wrap: wrap; margin: 10px 0; }
+  .phrases button { font-size: 12.5px; padding: 6px 11px; border-radius: 999px; color: var(--muted); }
+
+  #feedback { display: grid; gap: 10px; }
+  .fb { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .fb h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+  .fb p { margin: 0; }
+  .fb.praise { border-color: rgba(78,230,165,.34); }
+  .fb.fix { border-left: 2px solid var(--accent-2); border-radius: 0 12px 12px 0; }
+  .fb .said { font-style: italic; color: var(--ink); }
+  ul.fixes { margin: 6px 0 0; padding-left: 18px; }
+  ul.fixes li { margin: 3px 0; }
+  .grade { font: 700 30px/1 ui-monospace, Menlo, monospace; color: var(--ok); }
+  dialog {
+    border: 1px solid var(--line); border-radius: 16px; background: var(--panel);
+    color: var(--ink); padding: 20px; max-width: 460px; width: calc(100% - 36px);
+  }
+  dialog::backdrop { background: rgba(6,4,9,.76); }
+  dialog h3 { margin: 0 0 6px; font-size: 17px; }
+  .code {
+    font: 600 26px/1.2 ui-monospace, Menlo, monospace; letter-spacing: .16em;
+    padding: 12px 14px; border-radius: 10px; background: #120e18; border: 1px solid var(--line);
+    display: inline-block; margin: 10px 0;
+  }
+  .fine { color: var(--muted); font-size: 12.5px; }
+  footer { color: var(--muted); font-size: 12.5px; text-align: center; padding: 6px 18px 34px; }
+  footer p { margin: 9px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Sing<span>check</span></div>
+  <span class="pill" id="auth-pill-wrap"><span class="dot" id="auth-dot"></span><span id="auth-text">signed out</span></span>
+  <div class="spacer"></div>
+  <button class="ghost" id="btn-signin">Sign in with Pollinations</button>
+  <button class="ghost" id="btn-signout" hidden>Sign out</button>
+</header>
+
+<main>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-sing" aria-selected="true">Sing a note</button>
+    <button role="tab" id="tab-speak" aria-selected="false">Speak a line</button>
+  </div>
+
+  <!-- ============ SING ============ -->
+  <section id="panel-sing">
+    <div class="card">
+      <h2>Pitch, live</h2>
+      <p class="hint">Press Start, sing a steady “ah” or a short melody. Everything here runs on your device — no audio leaves this browser in this mode.</p>
+      <div id="meter-wrap">
+        <canvas id="meter" width="960" height="240" aria-label="Live pitch trace"></canvas>
+        <div id="meter-label">waiting for the microphone…</div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="btn-start-sing">Start listening</button>
+        <button class="ghost" id="btn-stop-sing" hidden>Stop</button>
+        <div class="spacer"></div>
+        <div class="big"><span id="note-name">—</span> <span id="cents" class="fine"></span></div>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">Time in tune</div><div class="v" id="stat-tune">—</div></div>
+        <div class="stat"><div class="k">Average offset</div><div class="v" id="stat-offset">—</div></div>
+        <div class="stat"><div class="k">Steadiest note</div><div class="v" id="stat-best">—</div></div>
+        <div class="stat"><div class="k">Note you hit most</div><div class="v" id="stat-most">—</div></div>
+      </div>
+      <div id="status-sing" class="status"></div>
+    </div>
+  </section>
+
+  <!-- ============ SPEAK ============ -->
+  <section id="panel-speak" hidden>
+    <div class="card">
+      <h2>Say it out loud</h2>
+      <p class="hint">Read the line below. A Pollinations transcription model writes down what it heard, then a text model tells you what to fix — pace, clarity, the words that slipped.</p>
+      <div class="phrases" id="phrases"></div>
+      <textarea id="target" placeholder="Type the line you want to practise…">She sells sea shells by the sea shore, and the shells she sells are surely seashells.</textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="primary rec" id="btn-record">Record</button>
+        <button class="ghost" id="btn-stop-rec" hidden>Stop and check</button>
+        <span class="fine" id="rec-time"></span>
+      </div>
+      <div id="status-speak" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Feedback</h2>
+      <div id="feedback-empty" class="hint">Nothing recorded yet. Press Record, read the line, then Stop and check.</div>
+      <div id="feedback" hidden></div>
+      <div class="row" style="margin-top:12px" id="feedback-actions" hidden>
+        <button id="btn-hear">Hear it read properly</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<dialog id="signin-dialog">
+  <h3>Sign in with Pollinations</h3>
+  <p class="fine" style="margin:0 0 4px">Open the link, approve the code, and this tab signs itself in. The token lives in this tab only.</p>
+  <div class="code" id="device-code">…</div>
+  <p><a id="device-link" href="#" target="_blank" rel="noopener">Open the approval page</a></p>
+  <p class="fine" id="device-note">Waiting for approval…</p>
+  <div class="row"><button class="ghost" id="btn-cancel-signin">Cancel</button></div>
+</dialog>
+
+<footer>
+  <a href="https://pollinations.ai/?ref=badge" target="_blank" rel="noopener">
+    <img src="docs/badge-made-with.svg" alt="Made with pollinations.ai" width="174" height="20" style="vertical-align:middle">
+  </a>
+  <p>
+    Pitch is measured in your browser. Transcription, feedback and read-back use Pollinations models
+    with your own balance — the page holds no key.
+  </p>
+</footer>
+
+<script>
+const ENTER = "https://enter.pollinations.ai";
+const GEN = "https://gen.pollinations.ai";
+const TOKEN_KEY = "singcheck.token";
+const TRANSCRIBE_MODEL = "openai/whisper-large-v3";
+const TEXT_MODEL = "openai/gpt-5.4-nano";
+const TTS_MODEL = "openai/tts-1";
+const MAX_SECONDS = 20;
+
+const $ = (id) => document.getElementById(id);
+const state = {
+  token: null,
+  poll: null,
+  // sing
+  audioCtx: null,
+  analyser: null,
+  stream: null,
+  raf: null,
+  frames: [],
+  songStart: 0,
+  // speak
+  recorder: null,
+  chunks: [],
+  recordTimer: null,
+  recordStart: 0,
+  lastFeedback: null,
+};
+
+/* ---------------- sign-in ---------------- */
+
+function readToken() {
+  try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; }
+}
+function saveToken(token) {
+  try { token ? sessionStorage.setItem(TOKEN_KEY, token) : sessionStorage.removeItem(TOKEN_KEY); } catch { /* private mode */ }
+  state.token = token;
+  paintAuth();
+}
+function paintAuth() {
+  const on = Boolean(state.token);
+  $("auth-dot").classList.toggle("on", on);
+  $("auth-text").textContent = on ? "signed in" : "signed out";
+  $("btn-signin").hidden = on;
+  $("btn-signout").hidden = !on;
+}
+
+async function postJson(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text.slice(0, 300) }; }
+  if (!res.ok) throw new Error(`${res.status} ${data.error || data.raw || res.statusText}`);
+  return data;
+}
+
+async function signIn() {
+  const dialog = $("signin-dialog");
+  dialog.showModal();
+  $("device-note").textContent = "Waiting for approval…";
+  let device;
+  try {
+    device = await postJson(`${ENTER}/api/device/code`, { scope: "generate" });
+  } catch (error) {
+    $("device-note").textContent = `Could not start sign-in: ${error.message}`;
+    return;
+  }
+  $("device-code").textContent = device.user_code;
+  const url = device.verification_uri_complete || device.verification_uri;
+  $("device-link").href = url;
+  window.open(url, "_blank", "noopener");
+
+  const interval = Math.max(3, Number(device.interval) || 5);
+  const deadline = Date.now() + (Number(device.expires_in) || 1800) * 1000;
+  clearInterval(state.poll);
+  state.poll = setInterval(async () => {
+    if (Date.now() > deadline) {
+      clearInterval(state.poll);
+      $("device-note").textContent = "The code expired. Press Sign in again.";
+      return;
+    }
+    try {
+      const token = await postJson(`${ENTER}/api/device/token`, {
+        device_code: device.device_code,
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+      });
+      if (token.access_token) {
+        clearInterval(state.poll);
+        saveToken(token.access_token);
+        dialog.close();
+        setStatus("speak", "Signed in. Press Record and read the line.");
+      }
+    } catch (error) {
+      const message = String(error.message || "");
+      if (!message.startsWith("400") && !/pending|slow_down/i.test(message)) {
+        clearInterval(state.poll);
+        $("device-note").textContent = `Sign-in failed: ${message}`;
+      }
+    }
+  }, interval * 1000);
+}
+
+function cancelSignIn() {
+  clearInterval(state.poll);
+  const dialog = $("signin-dialog");
+  if (dialog.open) dialog.close();
+}
+
+function setStatus(which, message, isError = false) {
+  const node = $(which === "sing" ? "status-sing" : "status-speak");
+  node.textContent = message;
+  node.classList.toggle("err", Boolean(isError));
+}
+
+/* ---------------- tabs ---------------- */
+
+function showPanel(name) {
+  const sing = name === "sing";
+  $("tab-sing").setAttribute("aria-selected", String(sing));
+  $("tab-speak").setAttribute("aria-selected", String(!sing));
+  $("panel-sing").hidden = !sing;
+  $("panel-speak").hidden = sing;
+  if (sing) stopRecording();
+  else stopListening();
+}
+
+/* ---------------- pitch: autocorrelation ---------------- */
+
+const NOTE_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+
+function frequencyToNote(freq) {
+  const midi = 69 + 12 * Math.log2(freq / 440);
+  const nearest = Math.round(midi);
+  const cents = Math.round((midi - nearest) * 100);
+  return { midi: nearest, name: NOTE_NAMES[((nearest % 12) + 12) % 12], octave: Math.floor(nearest / 12) - 1, cents };
+}
+
+/* Normalised autocorrelation: honest enough for a single voice, cheap enough for a phone. */
+function detectPitch(buffer, sampleRate) {
+  const size = buffer.length;
+  let rms = 0;
+  for (let i = 0; i < size; i++) rms += buffer[i] * buffer[i];
+  rms = Math.sqrt(rms / size);
+  if (rms < 0.012) return { freq: -1, rms };
+
+  let start = 0;
+  let end = size - 1;
+  const threshold = 0.2;
+  for (let i = 0; i < size / 2; i++) if (Math.abs(buffer[i]) < threshold) { start = i; break; }
+  for (let i = 1; i < size / 2; i++) if (Math.abs(buffer[size - i]) < threshold) { end = size - i; break; }
+  const slice = buffer.subarray(start, end);
+  const n = slice.length;
+  if (n < 64) return { freq: -1, rms };
+
+  const correlations = new Float32Array(n);
+  for (let lag = 0; lag < n; lag++) {
+    let sum = 0;
+    for (let i = 0; i < n - lag; i++) sum += slice[i] * slice[i + lag];
+    correlations[lag] = sum;
+  }
+  let d = 0;
+  while (d < n - 1 && correlations[d] > correlations[d + 1]) d++;
+  let maxLag = d;
+  for (let lag = d; lag < n; lag++) if (correlations[lag] > correlations[maxLag]) maxLag = lag;
+  if (maxLag <= 0) return { freq: -1, rms };
+
+  const y1 = correlations[maxLag - 1] ?? 0;
+  const y2 = correlations[maxLag];
+  const y3 = correlations[maxLag + 1] ?? 0;
+  const denom = 2 * (2 * y2 - y1 - y3);
+  const shift = denom !== 0 ? (y3 - y1) / denom : 0;
+  const period = maxLag + shift;
+  const freq = sampleRate / period;
+  if (!Number.isFinite(freq) || freq < 60 || freq > 1600) return { freq: -1, rms };
+  return { freq, rms };
+}
+
+/* ---------------- pitch: the run ---------------- */
+
+const METER = $("meter");
+const ctx2d = METER.getContext("2d");
+
+function drawMeter() {
+  const w = METER.width;
+  const h = METER.height;
+  ctx2d.clearRect(0, 0, w, h);
+
+  // -50 … +50 cents bands
+  ctx2d.fillStyle = "#0b0810";
+  ctx2d.fillRect(0, 0, w, h);
+  const bands = [
+    { from: -50, to: 50, color: "rgba(78,230,165,.13)" },
+    { from: -50, to: -25, color: "rgba(255,179,71,.09)" },
+    { from: 25, to: 50, color: "rgba(255,179,71,.09)" },
+  ];
+  for (const band of bands) {
+    const y1 = h / 2 - (band.to / 50) * (h / 2 - 8);
+    const y2 = h / 2 - (band.from / 50) * (h / 2 - 8);
+    ctx2d.fillStyle = band.color;
+    ctx2d.fillRect(0, y1, w, y2 - y1);
+  }
+  ctx2d.strokeStyle = "rgba(255,255,255,.14)";
+  ctx2d.beginPath();
+  ctx2d.moveTo(0, h / 2);
+  ctx2d.lineTo(w, h / 2);
+  ctx2d.stroke();
+
+  const frames = state.frames;
+  if (!frames.length) return;
+  const windowSize = 220; // frames shown
+  const shown = frames.slice(-windowSize);
+  ctx2d.lineWidth = 3;
+  ctx2d.lineJoin = "round";
+  ctx2d.strokeStyle = "#b07cff";
+  ctx2d.beginPath();
+  shown.forEach((frame, index) => {
+    const x = (index / Math.max(1, windowSize - 1)) * w;
+    const y = h / 2 - (Math.max(-50, Math.min(50, frame.cents)) / 50) * (h / 2 - 8);
+    if (index === 0) ctx2d.moveTo(x, y);
+    else ctx2d.lineTo(x, y);
+  });
+  ctx2d.stroke();
+
+  // the dot for the newest frame
+  const last = shown[shown.length - 1];
+  if (last) {
+    const x = ((shown.length - 1) / Math.max(1, windowSize - 1)) * w;
+    const y = h / 2 - (Math.max(-50, Math.min(50, last.cents)) / 50) * (h / 2 - 8);
+    ctx2d.fillStyle = Math.abs(last.cents) <= 25 ? "#4ee6a5" : "#ffb347";
+    ctx2d.beginPath();
+    ctx2d.arc(x, y, 6, 0, Math.PI * 2);
+    ctx2d.fill();
+  }
+}
+
+function summarise(frames) {
+  const voiced = frames.filter((f) => f.freq > 0);
+  if (!voiced.length) return null;
+  const inTune = voiced.filter((f) => Math.abs(f.cents) <= 25);
+  const avgOffset = voiced.reduce((sum, f) => sum + Math.abs(f.cents), 0) / voiced.length;
+
+  const byNote = new Map();
+  for (const frame of voiced) {
+    const key = frame.note + frame.octave;
+    const bucket = byNote.get(key) ?? { count: 0, offset: 0 };
+    bucket.count += 1;
+    bucket.offset += Math.abs(frame.cents);
+    byNote.set(key, bucket);
+  }
+  let steadiest = null;
+  let most = null;
+  for (const [key, value] of byNote) {
+    const mean = value.offset / value.count;
+    if (!steadiest || (value.count >= 4 && mean < steadiest.mean)) steadiest = { key, mean };
+    if (!most || value.count > most.count) most = { key, count: value.count };
+  }
+  return {
+    tunePercent: Math.round((inTune.length / voiced.length) * 100),
+    avgOffset: Math.round(avgOffset),
+    steadiest,
+    most,
+    voicedFrames: voiced.length,
+    seconds: Math.round(voiced.length / 46),
+  };
+}
+
+function paintSummary(summary) {
+  if (!summary) {
+    $("stat-tune").textContent = "—";
+    $("stat-offset").textContent = "—";
+    $("stat-best").textContent = "—";
+    $("stat-most").textContent = "—";
+    return;
+  }
+  $("stat-tune").textContent = `${summary.tunePercent}%`;
+  $("stat-offset").textContent = `${summary.avgOffset}¢`;
+  $("stat-best").textContent = summary.steadiest ? `${summary.steadiest.key} (${Math.round(summary.steadiest.mean)}¢)` : "—";
+  $("stat-most").textContent = summary.most ? `${summary.most.key}` : "—";
+}
+
+async function startListening() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setStatus("sing", "This browser has no microphone API.", true);
+    return;
+  }
+  try {
+    state.stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    });
+  } catch (error) {
+    setStatus("sing", `Microphone unavailable (${error.name || error.message}).`, true);
+    return;
+  }
+  state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = state.audioCtx.createMediaStreamSource(state.stream);
+  state.analyser = state.audioCtx.createAnalyser();
+  state.analyser.fftSize = 2048;
+  source.connect(state.analyser);
+  state.frames = [];
+  state.songStart = performance.now();
+  $("btn-start-sing").hidden = true;
+  $("btn-stop-sing").hidden = false;
+  $("meter-label").textContent = "listening…";
+  setStatus("sing", "Sing now. Stop when you are done to see the summary.");
+
+  const buffer = new Float32Array(state.analyser.fftSize);
+  const tick = () => {
+    if (!state.analyser) return;
+    state.analyser.getFloatTimeDomainData(buffer);
+    const { freq } = detectPitch(buffer, state.audioCtx.sampleRate);
+    if (freq > 0) {
+      const note = frequencyToNote(freq);
+      state.frames.push({ freq, cents: note.cents, note: note.name, octave: note.octave, at: performance.now() });
+      $("note-name").textContent = `${note.name}${note.octave}`;
+      $("cents").textContent = `${note.cents > 0 ? "+" : ""}${note.cents}¢`;
+      $("meter-label").textContent = `${freq.toFixed(1)} Hz`;
+    } else {
+      $("cents").textContent = "";
+    }
+    drawMeter();
+    paintSummary(summarise(state.frames));
+    state.raf = requestAnimationFrame(tick);
+  };
+  state.raf = requestAnimationFrame(tick);
+}
+
+function stopListening() {
+  if (state.raf) cancelAnimationFrame(state.raf);
+  state.raf = null;
+  if (state.stream) {
+    for (const track of state.stream.getTracks()) track.stop();
+    state.stream = null;
+  }
+  if (state.audioCtx) {
+    state.audioCtx.close().catch(() => {});
+    state.audioCtx = null;
+  }
+  state.analyser = null;
+  $("btn-start-sing").hidden = false;
+  $("btn-stop-sing").hidden = true;
+  $("meter-label").textContent = "stopped";
+  const summary = summarise(state.frames);
+  if (summary) {
+    paintSummary(summary);
+    setStatus("sing", `About ${summary.seconds}s of voice: ${summary.tunePercent}% within 25 cents, average offset ${summary.avgOffset} cents. The steadiest note is the one to build a melody on.`);
+  } else {
+    setStatus("sing", "No steady pitch heard. Try one long “ah” closer to the microphone.");
+  }
+}
+
+/* ---------------- speaking ---------------- */
+
+const PHRASES = [
+  "She sells sea shells by the sea shore.",
+  "Red lorry, yellow lorry, red lorry, yellow lorry.",
+  "The sixth sheikh's sixth sheep is sick.",
+  "I would like a little butter with my bread, please.",
+];
+
+function bootPhrases() {
+  const wrap = $("phrases");
+  for (const phrase of PHRASES) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = phrase.length > 42 ? `${phrase.slice(0, 40)}…` : phrase;
+    button.title = phrase;
+    button.onclick = () => { $("target").value = phrase; };
+    wrap.append(button);
+  }
+}
+
+function pickMimeType() {
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
+  for (const type of candidates) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return "";
+}
+
+async function startRecording() {
+  if (!state.token) {
+    setStatus("speak", "Sign in first: transcription bills your own Pollinations balance.", true);
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    setStatus("speak", "This browser cannot record audio.", true);
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (error) {
+    setStatus("speak", `Microphone unavailable (${error.name || error.message}).`, true);
+    return;
+  }
+  const mimeType = pickMimeType();
+  try {
+    state.recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  } catch (error) {
+    setStatus("speak", `Recording failed to start: ${error.message}`, true);
+    for (const track of stream.getTracks()) track.stop();
+    return;
+  }
+  state.chunks = [];
+  state.recorder.ondataavailable = (event) => { if (event.data?.size) state.chunks.push(event.data); };
+  state.recorder.onstop = () => {
+    for (const track of stream.getTracks()) track.stop();
+    checkRecording(mimeType || state.recorder.mimeType || "audio/webm");
+  };
+  state.recorder.start();
+  state.recordStart = Date.now();
+  $("btn-record").hidden = true;
+  $("btn-stop-rec").hidden = false;
+  setStatus("speak", "Recording. Read the line, then press Stop and check.");
+
+  clearInterval(state.recordTimer);
+  state.recordTimer = setInterval(() => {
+    const seconds = Math.floor((Date.now() - state.recordStart) / 1000);
+    $("rec-time").textContent = `${seconds}s / ${MAX_SECONDS}s`;
+    if (seconds >= MAX_SECONDS) stopRecording();
+  }, 250);
+}
+
+function stopRecording() {
+  clearInterval(state.recordTimer);
+  state.recordTimer = null;
+  $("rec-time").textContent = "";
+  if (!state.recorder) return;
+  if (state.recorder.state !== "inactive") state.recorder.stop();
+  state.recorder = null;
+  $("btn-record").hidden = false;
+  $("btn-stop-rec").hidden = true;
+}
+
+async function transcribe(blob, mimeType) {
+  const form = new FormData();
+  const extension = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
+  form.append("file", blob, `take.${extension}`);
+  form.append("model", TRANSCRIBE_MODEL);
+  form.append("response_format", "json");
+  const res = await fetch(`${GEN}/v1/audio/transcriptions`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${state.token}` },
+    body: form,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`${res.status} ${text.slice(0, 220)}`);
+  let data;
+  try { data = JSON.parse(text); } catch { data = { text }; }
+  return String(data.text || "").trim();
+}
+
+const FEEDBACK_SYSTEM = [
+  "You coach someone practising speaking out loud. You get the line they were meant to say and the transcript of what a transcription model heard.",
+  'Reply with JSON only, no prose and no code fences: {"grade":"clear"|"almost"|"unclear","said":string,"heard_gap":string,"wins":string[],"fixes":string[],"next_try":string}',
+  "Rules:",
+  "- grade judges how well the transcript matches the target line. A perfect match is \"clear\".",
+  "- said: the transcript, cleaned up, unchanged in meaning.",
+  "- heard_gap: one sentence naming the words that came out differently, quoting both versions. If nothing is off, say so.",
+  "- wins: 1 to 2 short points that genuinely went well.",
+  "- fixes: 1 to 3 short, concrete instructions (breath, pace, ending consonants, one word to slow down).",
+  "- next_try: one line to say again, at most 12 words.",
+  "- Never invent words the transcript does not contain, and never comment on the person's voice or accent.",
+].join("\n");
+
+async function coach(target, transcript) {
+  const res = await fetch(`${GEN}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${state.token}` },
+    body: JSON.stringify({
+      model: TEXT_MODEL,
+      response_format: { type: "json_object" },
+      temperature: 0.3,
+      messages: [
+        { role: "system", content: FEEDBACK_SYSTEM },
+        { role: "user", content: `Target line: ${target}\nTranscript: ${transcript || "(nothing was heard)"}` },
+      ],
+    }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`${res.status} ${text.slice(0, 220)}`);
+  let data;
+  try { data = JSON.parse(text); } catch { throw new Error(`the model sent non-JSON: ${text.slice(0, 140)}`); }
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) throw new Error("the model returned an empty message");
+  let cleaned = String(content).trim();
+  const fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) cleaned = fence[1].trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start > 0 || end < cleaned.length - 1) cleaned = cleaned.slice(start, end + 1);
+  const raw = JSON.parse(cleaned);
+  const grade = ["clear", "almost", "unclear"].includes(raw.grade) ? raw.grade : "almost";
+  return {
+    grade,
+    said: String(raw.said || transcript || "").slice(0, 400),
+    gap: String(raw.heard_gap || "").slice(0, 320),
+    wins: (Array.isArray(raw.wins) ? raw.wins : []).slice(0, 2).map((s) => String(s).slice(0, 220)),
+    fixes: (Array.isArray(raw.fixes) ? raw.fixes : []).slice(0, 3).map((s) => String(s).slice(0, 220)),
+    nextTry: String(raw.next_try || "").slice(0, 160),
+  };
+}
+
+async function checkRecording(mimeType) {
+  if (!state.chunks.length) {
+    setStatus("speak", "Nothing was recorded. Press Record and speak into the microphone.", true);
+    return;
+  }
+  const blob = new Blob(state.chunks, { type: mimeType });
+  const target = $("target").value.trim();
+  try {
+    setStatus("speak", `Transcribing ${(blob.size / 1024).toFixed(0)} KB with ${TRANSCRIBE_MODEL}…`);
+    const transcript = await transcribe(blob, mimeType);
+    setStatus("speak", "Scoring what the model heard…");
+    const feedback = await coach(target, transcript);
+    paintFeedback(feedback);
+    setStatus("speak", `Grade: ${feedback.grade}. Try the next line whenever you are ready.`);
+  } catch (error) {
+    setStatus("speak", `${error.message}`, true);
+  }
+}
+
+function paintFeedback(feedback) {
+  state.lastFeedback = feedback;
+  $("feedback-empty").hidden = true;
+  const wrap = $("feedback");
+  wrap.hidden = false;
+  wrap.textContent = "";
+  $("feedback-actions").hidden = false;
+
+  const head = document.createElement("div");
+  head.className = "fb";
+  const label = { clear: "Clear", almost: "Almost there", unclear: "Unclear" }[feedback.grade];
+  head.innerHTML = `<h3>What it heard</h3>`;
+  const grade = document.createElement("div");
+  grade.className = "grade";
+  grade.textContent = label;
+  const said = document.createElement("p");
+  said.className = "said";
+  said.textContent = `“${feedback.said || "(nothing)"}”`;
+  head.append(grade, said);
+  wrap.append(head);
+
+  if (feedback.gap) {
+    const gap = document.createElement("div");
+    gap.className = "fb";
+    gap.innerHTML = "<h3>Where it drifted</h3>";
+    const p = document.createElement("p");
+    p.textContent = feedback.gap;
+    gap.append(p);
+    wrap.append(gap);
+  }
+
+  for (const win of feedback.wins) {
+    const box = document.createElement("div");
+    box.className = "fb praise";
+    box.innerHTML = "<h3>Worked</h3>";
+    const p = document.createElement("p");
+    p.textContent = win;
+    box.append(p);
+    wrap.append(box);
+  }
+
+  if (feedback.fixes.length) {
+    const box = document.createElement("div");
+    box.className = "fb fix";
+    box.innerHTML = "<h3>Fix next time</h3>";
+    const list = document.createElement("ul");
+    list.className = "fixes";
+    for (const fix of feedback.fixes) {
+      const li = document.createElement("li");
+      li.textContent = fix;
+      list.append(li);
+    }
+    box.append(list);
+    wrap.append(box);
+  }
+
+  if (feedback.nextTry) {
+    const box = document.createElement("div");
+    box.className = "fb";
+    box.innerHTML = "<h3>Say this next</h3>";
+    const p = document.createElement("p");
+    p.textContent = feedback.nextTry;
+    const button = document.createElement("button");
+    button.className = "ghost";
+    button.style.marginTop = "8px";
+    button.textContent = "Use as the line";
+    button.onclick = () => { $("target").value = feedback.nextTry; };
+    box.append(p, button);
+    wrap.append(box);
+  }
+}
+
+async function hearIt() {
+  const text = state.lastFeedback?.nextTry || $("target").value.trim();
+  if (!text) return;
+  if (!state.token) {
+    setStatus("speak", "Sign in first: read-back uses your own Pollinations balance.", true);
+    return;
+  }
+  try {
+    setStatus("speak", `Preparing ${TTS_MODEL}…`);
+    const res = await fetch(`${GEN}/v1/audio/speech`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${state.token}` },
+      body: JSON.stringify({ model: TTS_MODEL, voice: "nova", input: text.slice(0, 800) }),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 200)}`);
+    const blob = await res.blob();
+    await new Audio(URL.createObjectURL(blob)).play();
+    setStatus("speak", "That is the model reading it. Now say it back the same way.");
+  } catch (error) {
+    setStatus("speak", `Read-back failed: ${error.message}`, true);
+  }
+}
+
+/* ---------------- boot ---------------- */
+
+function boot() {
+  bootPhrases();
+  drawMeter();
+  saveToken(readToken());
+  $("btn-signin").onclick = signIn;
+  $("btn-signout").onclick = () => { saveToken(null); setStatus("speak", "Signed out. The token is gone from this tab."); };
+  $("btn-cancel-signin").onclick = cancelSignIn;
+  $("signin-dialog").addEventListener("close", cancelSignIn);
+  $("tab-sing").onclick = () => showPanel("sing");
+  $("tab-speak").onclick = () => showPanel("speak");
+  $("btn-start-sing").onclick = startListening;
+  $("btn-stop-sing").onclick = stopListening;
+  $("btn-record").onclick = startRecording;
+  $("btn-stop-rec").onclick = stopRecording;
+  $("btn-hear").onclick = hearIt;
+  window.addEventListener("beforeunload", () => { stopListening(); });
+}
+
+boot();
+</script>
+</body>
+</html>
